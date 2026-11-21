@@ -27,23 +27,48 @@
       user-select: none;
     }
 
-    /* Top Search & Info Bar */
+    /* Sembunyikan iframe YouTube di latar belakang */
+    #yt-hidden-player {
+      position: fixed;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    /* Top Bar */
     .top-bar {
-      padding: 16px 24px;
+      padding: 14px 24px;
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
       align-items: center;
       justify-content: space-between;
-      background: rgba(0, 0, 0, 0.3);
+      background: rgba(0, 0, 0, 0.35);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
       z-index: 10;
     }
 
+    .track-info-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .cover-art {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: rgba(255, 255, 255, 0.08);
+      display: none;
+    }
+
     .song-meta h1 {
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 700;
       letter-spacing: -0.3px;
     }
@@ -79,7 +104,7 @@
       padding: 8px 14px;
       border-radius: 10px;
       font-size: 13px;
-      width: 240px;
+      width: 230px;
       outline: none;
     }
 
@@ -103,7 +128,7 @@
       opacity: 0.85;
     }
 
-    /* Lyrics Viewport */
+    /* Lyrics Area */
     .lyrics-wrapper {
       position: relative;
       flex: 1;
@@ -124,7 +149,6 @@
       display: none;
     }
 
-    /* Gaya Umum Baris Lirik */
     .lyric-line {
       font-size: clamp(24px, 4vw, 36px);
       font-weight: 800;
@@ -153,7 +177,7 @@
       opacity: 1 !important;
     }
 
-    /* MODE 1: LRC LOKAL (Animasi Per Kata & Huruf Naik 1px/1dp) */
+    /* MODE 1: LRC LOKAL (Gradasi tipis kiri->kanan + Huruf naik 1px/1dp) */
     .lyric-word {
       display: inline-block;
       white-space: pre-wrap;
@@ -162,7 +186,6 @@
     .lyric-char {
       display: inline-block;
       white-space: pre;
-      /* Gradasi tipis (±2%) menyapu dari kiri ke kanan */
       background-image: linear-gradient(
         90deg,
         #ffffff calc(var(--char-prog, 0%) - 2%),
@@ -171,7 +194,6 @@
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
-      /* Huruf terangkat 1px (1dp) saat dilintasi gradien */
       transform: translateY(calc(var(--char-lift, 0) * -1px));
       transition: transform 0.14s ease-out;
       will-change: transform, background-image;
@@ -191,7 +213,7 @@
       color: #ffffff;
     }
 
-    /* Indikator Intro / Jeda Musik (•••) */
+    /* Indikator Jeda Musik */
     .lyric-line.interlude {
       display: flex;
       gap: 8px;
@@ -218,21 +240,56 @@
       50% { transform: scale(1.25); opacity: 1; }
     }
 
-    /* Player Bawah */
+    /* Custom Player Controls Bawah */
     .player-bar {
       padding: 14px 24px;
-      background: rgba(0, 0, 0, 0.4);
+      background: rgba(0, 0, 0, 0.45);
       backdrop-filter: blur(24px);
       -webkit-backdrop-filter: blur(24px);
       border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 16px;
       z-index: 10;
     }
 
-    audio {
-      width: 100%;
-      height: 36px;
-      filter: invert(1) hue-rotate(180deg);
-      opacity: 0.85;
+    .play-toggle {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .time-label {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.65);
+      font-variant-numeric: tabular-nums;
+      min-width: 38px;
+    }
+
+    .seek-bar {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .seek-bar::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #ffffff;
+      cursor: pointer;
     }
 
     .status-msg {
@@ -245,10 +302,16 @@
 </head>
 <body>
 
+  <!-- Hidden YouTube Audio Player -->
+  <div id="yt-hidden-player"></div>
+
   <div class="top-bar">
-    <div class="song-meta">
-      <h1 id="track-title">Cari Lagu untuk Memutar <span id="source-badge"></span></h1>
-      <p id="track-artist">MusicVault Backend + Local Enhanced LRC / LRCLIB</p>
+    <div class="track-info-wrap">
+      <img id="cover-art" class="cover-art" alt="Cover" />
+      <div class="song-meta">
+        <h1 id="track-title">Cari Lagu untuk Memutar <span id="source-badge"></span></h1>
+        <p id="track-artist">MusicVault Backend + Local Enhanced LRC / LRCLIB</p>
+      </div>
     </div>
 
     <div class="search-box">
@@ -259,28 +322,127 @@
 
   <div class="lyrics-wrapper">
     <div class="lyrics-container" id="lyrics-container">
-      <div class="status-msg">Ketik nama lagu di atas untuk mencari lewat API & memuat lirik otomatis.</div>
+      <div class="status-msg">Ketik nama lagu di atas untuk mencari & memutar musik.</div>
     </div>
   </div>
 
   <div class="player-bar">
-    <audio id="audio-player" controls></audio>
+    <button class="play-toggle" id="play-pause-btn" title="Play / Pause">▶</button>
+    <span class="time-label" id="curr-time">0:00</span>
+    <input type="range" class="seek-bar" id="seek-bar" min="0" max="100" value="0" step="0.1" />
+    <span class="time-label" id="dur-time">0:00</span>
   </div>
 
+  <!-- Muat YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
   <script>
     const API_BASE = 'https://musicvalt-api.revhan-stories12.workers.dev/?q=';
-    const audio = document.getElementById('audio-player');
     const container = document.getElementById('lyrics-container');
     const titleEl = document.getElementById('track-title');
     const artistEl = document.getElementById('track-artist');
+    const coverEl = document.getElementById('cover-art');
     const searchInput = document.getElementById('search-input');
     const searchBtn = document.getElementById('search-btn');
+    const playPauseBtn = document.getElementById('play-pause-btn');
+    const seekBar = document.getElementById('seek-bar');
+    const currTimeEl = document.getElementById('curr-time');
+    const durTimeEl = document.getElementById('dur-time');
+
+    let ytPlayer = null;
+    let isPlayerReady = false;
+    let pendingVideoId = null;
+    let isSeeking = false;
 
     let lineElements = [];
     let activeLineIndex = -1;
     let isAnimatedMode = false;
     let isUserScrolling = false;
     let scrollTimeout = null;
+
+    // 1. INISIALISASI YOUTUBE IFRAME PLAYER
+    window.onYouTubeIframeAPIReady = function () {
+      ytPlayer = new YT.Player('yt-hidden-player', {
+        height: '1',
+        width: '1',
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          rel: 0
+        },
+        events: {
+          onReady: () => {
+            isPlayerReady = true;
+            if (pendingVideoId) {
+              ytPlayer.loadVideoById(pendingVideoId);
+              pendingVideoId = null;
+            }
+          },
+          onStateChange: (e) => {
+            if (e.data === YT.PlayerState.PLAYING) {
+              playPauseBtn.textContent = '⏸';
+            } else if (e.data === YT.PlayerState.PAUSED || e.data === YT.PlayerState.ENDED) {
+              playPauseBtn.textContent = '▶';
+            }
+          }
+        }
+      });
+    };
+
+    function playYouTubeId(videoId) {
+      if (!videoId) return;
+      if (isPlayerReady && ytPlayer) {
+        ytPlayer.loadVideoById(videoId);
+        ytPlayer.playVideo();
+      } else {
+        pendingVideoId = videoId;
+      }
+    }
+
+    function getCurrentPlaybackTime() {
+      if (isPlayerReady && ytPlayer && typeof ytPlayer.getCurrentTime === 'function') {
+        return ytPlayer.getCurrentTime() || 0;
+      }
+      return 0;
+    }
+
+    function getPlaybackDuration() {
+      if (isPlayerReady && ytPlayer && typeof ytPlayer.getDuration === 'function') {
+        return ytPlayer.getDuration() || 0;
+      }
+      return 0;
+    }
+
+    function seekToTime(sec) {
+      if (isPlayerReady && ytPlayer && typeof ytPlayer.seekTo === 'function') {
+        ytPlayer.seekTo(sec, true);
+        ytPlayer.playVideo();
+      }
+    }
+
+    playPauseBtn.addEventListener('click', () => {
+      if (!isPlayerReady || !ytPlayer) return;
+      const state = ytPlayer.getPlayerState();
+      if (state === YT.PlayerState.PLAYING) {
+        ytPlayer.pauseVideo();
+      } else {
+        ytPlayer.playVideo();
+      }
+    });
+
+    seekBar.addEventListener('input', () => { isSeeking = true; });
+    seekBar.addEventListener('change', () => {
+      seekToTime(parseFloat(seekBar.value));
+      isSeeking = false;
+    });
+
+    function formatTime(sec) {
+      if (!sec || isNaN(sec)) return '0:00';
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
 
     ['wheel', 'touchmove'].forEach(evt => {
       container.addEventListener(evt, () => {
@@ -290,7 +452,7 @@
       }, { passive: true });
     });
 
-    // PARSER 1: Enhanced LRC Lokal (dengan timestamp per kata <mm:ss.xx>)
+    // 2. PARSER ENHANCED LRC LOKAL (<00:14.09>)
     function parseEnhancedLRC(lrcText) {
       const lines = lrcText.split(/\r?\n/);
       const result = [];
@@ -343,7 +505,7 @@
       return result;
     }
 
-    // PARSER 2: LRC Standar dari LRCLIB (Tanpa animasi per kata)
+    // 3. PARSER LRC STANDAR LRCLIB
     function parsePlainLRC(lrcText) {
       const lines = lrcText.split(/\r?\n/);
       const result = [];
@@ -364,7 +526,7 @@
       return result;
     }
 
-    // RENDER LIRIK KE DOM
+    // 4. RENDER LIRIK
     function renderLyrics(data, animated) {
       container.innerHTML = '';
       activeLineIndex = -1;
@@ -383,8 +545,7 @@
           (!animated && !line.isInterlude ? ' plain-sync' : '');
 
         lineDiv.addEventListener('click', () => {
-          audio.currentTime = line.lineStart;
-          audio.play();
+          seekToTime(line.lineStart);
         });
 
         const charRefs = [];
@@ -425,155 +586,6 @@
       });
     }
 
-    // LOOP ANIMASI 60FPS
+    // 5. LOOP SINKRONISASI 60FPS
     function syncLoop() {
-      const now = audio.currentTime;
-
-      if (lineElements.length > 0) {
-        let currentIdx = -1;
-        for (let i = 0; i < lineElements.length; i++) {
-          const start = lineElements[i].data.lineStart;
-          const next = (i < lineElements.length - 1) ? lineElements[i + 1].data.lineStart : Infinity;
-          if (now >= start && now < next) {
-            currentIdx = i;
-            break;
-          }
-        }
-
-        if (currentIdx !== activeLineIndex) {
-          if (activeLineIndex !== -1 && lineElements[activeLineIndex]) {
-            lineElements[activeLineIndex].el.classList.remove('active');
-          }
-          if (currentIdx !== -1 && lineElements[currentIdx]) {
-            const target = lineElements[currentIdx].el;
-            target.classList.add('active');
-            if (!isUserScrolling) {
-              target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-          }
-          activeLineIndex = currentIdx;
-        }
-
-        // Jalankan animasi sapuan kiri-ke-kanan & huruf naik 1px (1dp) HANYA untuk LRC Lokal
-        if (isAnimatedMode && activeLineIndex !== -1) {
-          const activeLine = lineElements[activeLineIndex];
-          activeLine.charRefs.forEach((c) => {
-            let prog = 0;
-            let lift = 0;
-
-            if (now >= c.end) {
-              prog = 100;
-              lift = 0;
-            } else if (now > c.start) {
-              const dur = Math.max(c.end - c.start, 0.02);
-              prog = ((now - c.start) / dur) * 100;
-              lift = c.isSpace ? 0 : 1;
-            }
-
-            c.el.style.setProperty('--char-prog', `${prog.toFixed(1)}%`);
-            c.el.style.setProperty('--char-lift', lift);
-          });
-        }
-      }
-
-      requestAnimationFrame(syncLoop);
-    }
-
-    syncLoop();
-
-    function setHeader(title, artist, badgeText, badgeClass) {
-      titleEl.innerHTML = `${title} ${badgeText ? `<span class="badge ${badgeClass}">${badgeText}</span>` : ''}`;
-      artistEl.textContent = artist || 'Unknown Artist';
-    }
-
-    // AMBIL LIRIK: Cek ./lyrics/{videoId}.lrc dulu -> Jika tidak ada, fallback ke LRCLIB Search
-    async function loadLyricsWithFallback(videoId, title, artist, duration) {
-      container.innerHTML = '<div class="status-msg">Memuat lirik...</div>';
-
-      // 1. Cek di folder lokal ./lyrics/
-      if (videoId) {
-        try {
-          const localRes = await fetch(`./lyrics/${videoId}.lrc`);
-          if (localRes.ok) {
-            const text = await localRes.text();
-            if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
-              const parsed = parseEnhancedLRC(text);
-              const hasWordSync = parsed.some(l => l.words && l.words.length > 0);
-              setHeader(title, artist, 'LRC Lokal (Animated)', 'badge-local');
-              renderLyrics(parsed, hasWordSync);
-              return;
-            }
-          }
-        } catch (_) {}
-      }
-
-      // 2. Fallback ke LRCLIB Search API (Tanpa Animasi Per Kata/Huruf)
-      try {
-        const query = artist && artist !== 'Unknown Artist' ? `${title} ${artist}` : title;
-        const lrcLibRes = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(query)}`);
-        if (lrcLibRes.ok) {
-          const list = await lrcLibRes.json();
-          const match = list.find(item => item.syncedLyrics);
-          if (match) {
-            const parsedPlain = parsePlainLRC(match.syncedLyrics);
-            setHeader(match.trackName || title, match.artistName || artist, 'LRCLIB (Standard)', 'badge-lrclib');
-            renderLyrics(parsedPlain, false);
-            return;
-          }
-        }
-      } catch (_) {}
-
-      setHeader(title, artist, '', '');
-      container.innerHTML = '<div class="status-msg">Lirik belum tersedia di koleksi lokal maupun LRCLIB.</div>';
-    }
-
-    // CARI & PUTAR DARI BACKEND WORKER KAMU
-    async function searchAndPlay() {
-      const q = searchInput.value.trim();
-      if (!q) return;
-
-      container.innerHTML = '<div class="status-msg">Mencari lagu di MusicVault API...</div>';
-
-      try {
-        const res = await fetch(`${API_BASE}${encodeURIComponent(q)}`);
-        const json = await res.json();
-        console.log('Respons dari API kamu:', json);
-
-        let item = json;
-        if (Array.isArray(json)) item = json[0];
-        else if (json.data) item = Array.isArray(json.data) ? json.data[0] : json.data;
-        else if (json.results) item = json.results[0];
-        else if (json.items) item = json.items[0];
-
-        if (!item || typeof item !== 'object') {
-          container.innerHTML = '<div class="status-msg">Format respons API tidak dikenali.</div>';
-          return;
-        }
-
-        const videoId = item.id || item.videoId || item.video_id || item.ytId || '';
-        const audioUrl = item.audioUrl || item.audio_url || item.audio || item.streamUrl || item.stream || item.url || item.src || '';
-        const title = item.title || item.name || item.trackName || q;
-        const artist = item.artist || item.artistName || item.author || item.channel || item.uploader || '';
-        const duration = item.duration || item.lengthSeconds || 0;
-
-        if (audioUrl) {
-          audio.src = audioUrl;
-          audio.play().catch(() => {});
-        } else {
-          console.warn('URL audio tidak ditemukan di objek API:', item);
-        }
-
-        await loadLyricsWithFallback(videoId, title, artist, duration);
-      } catch (err) {
-        container.innerHTML = '<div class="status-msg">Gagal terhubung ke backend API.</div>';
-        console.error(err);
-      }
-    }
-
-    searchBtn.addEventListener('click', searchAndPlay);
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') searchAndPlay();
-    });
-  </script>
-</body>
-</html>
+      const now = getCurrentPlayback
