@@ -588,4 +588,160 @@
 
     // 5. LOOP SINKRONISASI 60FPS
     function syncLoop() {
-      const now = getCurrentPlayback
+      const now = getCurrentPlaybackTime();
+      const dur = getPlaybackDuration();
+
+      if (dur > 0 && !isSeeking) {
+        seekBar.max = dur;
+        seekBar.value = now;
+        currTimeEl.textContent = formatTime(now);
+        durTimeEl.textContent = formatTime(dur);
+      }
+
+      if (lineElements.length > 0) {
+        let currentIdx = -1;
+        for (let i = 0; i < lineElements.length; i++) {
+          const start = lineElements[i].data.lineStart;
+          const next = (i < lineElements.length - 1) ? lineElements[i + 1].data.lineStart : Infinity;
+          if (now >= start && now < next) {
+            currentIdx = i;
+            break;
+          }
+        }
+
+        if (currentIdx !== activeLineIndex) {
+          if (activeLineIndex !== -1 && lineElements[activeLineIndex]) {
+            lineElements[activeLineIndex].el.classList.remove('active');
+          }
+          if (currentIdx !== -1 && lineElements[currentIdx]) {
+            const target = lineElements[currentIdx].el;
+            target.classList.add('active');
+            if (!isUserScrolling) {
+              target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }
+          activeLineIndex = currentIdx;
+        }
+
+        if (isAnimatedMode && activeLineIndex !== -1) {
+          const activeLine = lineElements[activeLineIndex];
+          activeLine.charRefs.forEach((c) => {
+            let prog = 0;
+            let lift = 0;
+
+            if (now >= c.end) {
+              prog = 100;
+              lift = 0;
+            } else if (now > c.start) {
+              const cDur = Math.max(c.end - c.start, 0.02);
+              prog = ((now - c.start) / cDur) * 100;
+              lift = c.isSpace ? 0 : 1;
+            }
+
+            c.el.style.setProperty('--char-prog', `${prog.toFixed(1)}%`);
+            c.el.style.setProperty('--char-lift', lift);
+          });
+        }
+      }
+
+      requestAnimationFrame(syncLoop);
+    }
+
+    syncLoop();
+
+    function setHeader(title, artist, cover, badgeText, badgeClass) {
+      titleEl.innerHTML = `${title} ${badgeText ? `<span class="badge ${badgeClass}">${badgeText}</span>` : ''}`;
+      artistEl.textContent = artist || 'Unknown Artist';
+      if (cover) {
+        coverEl.src = cover;
+        coverEl.style.display = 'block';
+      } else {
+        coverEl.style.display = 'none';
+      }
+    }
+
+    // 6. MUAT LIRIK: Cek ./M-lyrics-api/lyrics/{id}.lrc -> ./lyrics/{id}.lrc -> Fallback LRCLIB
+    async function loadLyricsWithFallback(videoId, title, artist, cover) {
+      container.innerHTML = '<div class="status-msg">Memuat lirik...</div>';
+
+      if (videoId) {
+        const candidatePaths = [
+          `./M-lyrics-api/lyrics/${videoId}.lrc`,
+          `./lyrics/${videoId}.lrc`
+        ];
+
+        for (const path of candidatePaths) {
+          try {
+            const localRes = await fetch(path);
+            if (localRes.ok) {
+              const text = await localRes.text();
+              if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
+                const parsed = parseEnhancedLRC(text);
+                const hasWordSync = parsed.some(l => l.words && l.words.length > 0);
+                setHeader(title, artist, cover, 'LRC Lokal (Animated)', 'badge-local');
+                renderLyrics(parsed, hasWordSync);
+                return;
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      // Fallback ke LRCLIB Search (Tanpa Animasi Per Kata/Huruf)
+      try {
+        const cleanTitle = title.replace(/\s*\(.*?\)\s*/g, ' ').trim();
+        const query = artist ? `${cleanTitle} ${artist}` : cleanTitle;
+        const lrcLibRes = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(query)}`);
+        if (lrcLibRes.ok) {
+          const list = await lrcLibRes.json();
+          const match = list.find(item => item.syncedLyrics);
+          if (match) {
+            const parsedPlain = parsePlainLRC(match.syncedLyrics);
+            setHeader(title, artist, cover, 'LRCLIB (Standard)', 'badge-lrclib');
+            renderLyrics(parsedPlain, false);
+            return;
+          }
+        }
+      } catch (_) {}
+
+      setHeader(title, artist, cover, '', '');
+      container.innerHTML = '<div class="status-msg">Lirik belum tersedia di koleksi lokal maupun LRCLIB.</div>';
+    }
+
+    // 7. CARI & PUTAR DARI BACKEND API KAMU (id, judul, artis, coverArt)
+    async function searchAndPlay() {
+      const q = searchInput.value.trim();
+      if (!q) return;
+
+      container.innerHTML = '<div class="status-msg">Mencari lagu di MusicVault API...</div>';
+
+      try {
+        const res = await fetch(`${API_BASE}${encodeURIComponent(q)}`);
+        const json = await res.json();
+
+        const item = Array.isArray(json) ? json[0] : json;
+        if (!item || !item.id) {
+          container.innerHTML = '<div class="status-msg">Lagu tidak ditemukan.</div>';
+          return;
+        }
+
+        const videoId = item.id;
+        const title = item.judul || item.title || q;
+        const artist = item.artis || item.artist || '';
+        const cover = item.coverArt || '';
+
+        playYouTubeId(videoId);
+        await loadLyricsWithFallback(videoId, title, artist, cover);
+      } catch (err) {
+        container.innerHTML = '<div class="status-msg">Gagal terhubung ke backend API.</div>';
+        console.error(err);
+      }
+    }
+
+    searchBtn.addEventListener('click', searchAndPlay);
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') searchAndPlay();
+    });
+  </script>
+</body>
+</html>
