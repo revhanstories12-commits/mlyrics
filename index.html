@@ -162,7 +162,7 @@
     .lyric-char {
       display: inline-block;
       white-space: pre;
-      /* Gradasi sangat tipis (±2%) menyapu dari kiri ke kanan */
+      /* Gradasi tipis (±2%) menyapu dari kiri ke kanan */
       background-image: linear-gradient(
         90deg,
         #ffffff calc(var(--char-prog, 0%) - 2%),
@@ -183,7 +183,7 @@
       transform: translateY(0px);
     }
 
-    /* MODE 2: LRCLIB FALLBACK (Tanpa Animasi Per Kata/Huruf, Hanya Terang Per Baris) */
+    /* MODE 2: LRCLIB FALLBACK (Tanpa Animasi Per Kata/Huruf) */
     .lyric-line.plain-sync {
       color: rgba(255, 255, 255, 0.45);
     }
@@ -278,7 +278,7 @@
 
     let lineElements = [];
     let activeLineIndex = -1;
-    let isAnimatedMode = false; // true = LRC lokal (animasi per huruf), false = LRCLIB (tanpa animasi kata)
+    let isAnimatedMode = false;
     let isUserScrolling = false;
     let scrollTimeout = null;
 
@@ -328,7 +328,6 @@
           }
           result.push({ lineStart, isInterlude: false, words });
         } else {
-          // Jika file lokal ternyata cuma LRC per baris tanpa tag <mm:ss.xx>
           result.push({ lineStart, isInterlude: false, text: content.trim(), words: [] });
         }
       }
@@ -393,7 +392,6 @@
         if (line.isInterlude) {
           lineDiv.innerHTML = '<span class="interlude-dot"></span><span class="interlude-dot"></span><span class="interlude-dot"></span>';
         } else if (animated && line.words && line.words.length > 0) {
-          // Pecah per kata lalu per huruf agar setiap huruf bisa naik 1px (1dp) satu per satu
           line.words.forEach((w) => {
             const wordSpan = document.createElement('span');
             wordSpan.className = 'lyric-word';
@@ -419,7 +417,6 @@
             lineDiv.appendChild(wordSpan);
           });
         } else {
-          // Mode LRCLIB (polos tanpa span per kata/huruf)
           lineDiv.textContent = line.text || '';
         }
 
@@ -457,7 +454,7 @@
           activeLineIndex = currentIdx;
         }
 
-        // Jalankan animasi sapuan kiri-ke-kanan & huruf naik 1px HANYA untuk mode LRC Lokal
+        // Jalankan animasi sapuan kiri-ke-kanan & huruf naik 1px (1dp) HANYA untuk LRC Lokal
         if (isAnimatedMode && activeLineIndex !== -1) {
           const activeLine = lineElements[activeLineIndex];
           activeLine.charRefs.forEach((c) => {
@@ -466,11 +463,11 @@
 
             if (now >= c.end) {
               prog = 100;
-              lift = 0; // Kembali turun setelah dilewati
+              lift = 0;
             } else if (now > c.start) {
               const dur = Math.max(c.end - c.start, 0.02);
               prog = ((now - c.start) / dur) * 100;
-              lift = c.isSpace ? 0 : 1; // Naik 1px (1dp) tepat saat melintasi huruf
+              lift = c.isSpace ? 0 : 1;
             }
 
             c.el.style.setProperty('--char-prog', `${prog.toFixed(1)}%`);
@@ -484,7 +481,12 @@
 
     syncLoop();
 
-    // AMBIL LIRIK: Cek ./lyrics/{videoId}.lrc dulu -> Jika tidak ada, fallback ke LRCLIB
+    function setHeader(title, artist, badgeText, badgeClass) {
+      titleEl.innerHTML = `${title} ${badgeText ? `<span class="badge ${badgeClass}">${badgeText}</span>` : ''}`;
+      artistEl.textContent = artist || 'Unknown Artist';
+    }
+
+    // AMBIL LIRIK: Cek ./lyrics/{videoId}.lrc dulu -> Jika tidak ada, fallback ke LRCLIB Search
     async function loadLyricsWithFallback(videoId, title, artist, duration) {
       container.innerHTML = '<div class="status-msg">Memuat lirik...</div>';
 
@@ -494,7 +496,6 @@
           const localRes = await fetch(`./lyrics/${videoId}.lrc`);
           if (localRes.ok) {
             const text = await localRes.text();
-            // Pastikan bukan halaman HTML fallback 404 dari hosting
             if (!text.trim().startsWith('<!DOCTYPE') && !text.trim().startsWith('<html')) {
               const parsed = parseEnhancedLRC(text);
               const hasWordSync = parsed.some(l => l.words && l.words.length > 0);
@@ -506,18 +507,17 @@
         } catch (_) {}
       }
 
-      // 2. Fallback ke LRCLIB API (Tanpa Animasi Per Kata)
+      // 2. Fallback ke LRCLIB Search API (Tanpa Animasi Per Kata/Huruf)
       try {
-        const params = new URLSearchParams({ track_name: title, artist_name: artist });
-        if (duration) params.append('duration', Math.round(duration));
-
-        const lrcLibRes = await fetch(`https://lrclib.net/api/get?${params.toString()}`);
+        const query = artist && artist !== 'Unknown Artist' ? `${title} ${artist}` : title;
+        const lrcLibRes = await fetch(`https://lrclib.net/api/search?q=${encodeURIComponent(query)}`);
         if (lrcLibRes.ok) {
-          const data = await lrcLibRes.json();
-          if (data.syncedLyrics) {
-            const parsedPlain = parsePlainLRC(data.syncedLyrics);
-            setHeader(title, artist, 'LRCLIB (Standard)', 'badge-lrclib');
-            renderLyrics(parsedPlain, false); // false = matikan animasi per huruf/kata
+          const list = await lrcLibRes.json();
+          const match = list.find(item => item.syncedLyrics);
+          if (match) {
+            const parsedPlain = parsePlainLRC(match.syncedLyrics);
+            setHeader(match.trackName || title, match.artistName || artist, 'LRCLIB (Standard)', 'badge-lrclib');
+            renderLyrics(parsedPlain, false);
             return;
           }
         }
@@ -525,11 +525,6 @@
 
       setHeader(title, artist, '', '');
       container.innerHTML = '<div class="status-msg">Lirik belum tersedia di koleksi lokal maupun LRCLIB.</div>';
-    }
-
-    function setHeader(title, artist, badgeText, badgeClass) {
-      titleEl.innerHTML = `${title} ${badgeText ? `<span class="badge ${badgeClass}">${badgeText}</span>` : ''}`;
-      artistEl.textContent = artist || 'Unknown Artist';
     }
 
     // CARI & PUTAR DARI BACKEND WORKER KAMU
@@ -542,23 +537,30 @@
       try {
         const res = await fetch(`${API_BASE}${encodeURIComponent(q)}`);
         const json = await res.json();
+        console.log('Respons dari API kamu:', json);
 
-        // Sesuaikan mapping field ini jika struktur JSON dari worker-mu berbeda
-        const item = Array.isArray(json) ? json[0] : (json.results ? json.results[0] : json);
-        if (!item) {
-          container.innerHTML = '<div class="status-msg">Lagu tidak ditemukan di API.</div>';
+        let item = json;
+        if (Array.isArray(json)) item = json[0];
+        else if (json.data) item = Array.isArray(json.data) ? json.data[0] : json.data;
+        else if (json.results) item = json.results[0];
+        else if (json.items) item = json.items[0];
+
+        if (!item || typeof item !== 'object') {
+          container.innerHTML = '<div class="status-msg">Format respons API tidak dikenali.</div>';
           return;
         }
 
-        const videoId = item.id || item.videoId || item.video_id;
-        const audioUrl = item.audioUrl || item.url || item.streamUrl || item.stream;
-        const title = item.title || q;
-        const artist = item.artist || item.author || item.channel || '';
-        const duration = item.duration || 0;
+        const videoId = item.id || item.videoId || item.video_id || item.ytId || '';
+        const audioUrl = item.audioUrl || item.audio_url || item.audio || item.streamUrl || item.stream || item.url || item.src || '';
+        const title = item.title || item.name || item.trackName || q;
+        const artist = item.artist || item.artistName || item.author || item.channel || item.uploader || '';
+        const duration = item.duration || item.lengthSeconds || 0;
 
         if (audioUrl) {
           audio.src = audioUrl;
           audio.play().catch(() => {});
+        } else {
+          console.warn('URL audio tidak ditemukan di objek API:', item);
         }
 
         await loadLyricsWithFallback(videoId, title, artist, duration);
